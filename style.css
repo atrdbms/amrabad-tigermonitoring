@@ -280,3 +280,8 @@ table.pivot tr.tot td, table.pivot td:last-child { font-weight: 700; background:
 @media (max-width: 900px) { .bld, .pivot-opts { grid-template-columns: 1fr; } }
 .profile .ph .ph-tag { font-size: 10.5px; opacity: 1; }
 .profile .ph img { position: absolute; inset: 0; }
+.rep-head img { border-radius: 50%; object-fit: cover; }
+
+.rtype-bar { display: flex; align-items: center; gap: 12px; padding: 10px 14px; flex-wrap: wrap; }
+.rtype-bar label { font-weight: 800; color: var(--g800); }
+.rtype-bar select { min-width: 340px; padding: 8px 10px; border: 2px solid var(--g600); border-radius: 6px; font: inherit; font-weight: 600; color: var(--g900); background: #f1f8ee; }

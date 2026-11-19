@@ -6,8 +6,7 @@ live every time the page opens, so new rows in the sheet show up automatically.
 ## Files
 - `index.html` – the page
 - `config.js`  – **the only file you normally edit**: titles, logos, sheet link, map start point, column names
-- `assets/atr-logo.png`, `assets/telangana-emblem.png` – official logos shown in the title and report letterhead. To change them, replace these files
-  (same file name), or change the paths in `config.js`.
+- Logos (ATR and Government of Telangana emblem) are built into `index.html`; no image files to upload.
 - `app.js`     – filtering, map, report and export logic
 - `style.css`  – look and print layout
 

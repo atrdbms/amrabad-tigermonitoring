@@ -2,15 +2,16 @@
 // Site settings. Edit this file only; app.js reads everything from here.
 // ------------------------------------------------------------------
 window.ATR_CONFIG = {
-  // Branding. Replace the logo files in assets/ with official ones (PNG or SVG),
-  // or point these paths at your own files.
+  // Branding.
   branding: {
     govLine: "Government of Telangana · Telangana Forest Department",
     titleSmall: "Amrabad Tiger Reserve",
     titleMain: "Tiger Monitoring Management System",
     titleSub: "Camera Trap & Field Monitoring · Nagarkurnool & Nalgonda Districts",
-    logoLeft: "assets/atr-logo.png",
-    logoRight: "assets/telangana-emblem.png",
+    // Logos are built into index.html, so nothing extra needs uploading.
+    // To use different logos, put a file path or link here, e.g. "assets/my-logo.png".
+    logoLeft: "",
+    logoRight: "",
   },
 
   // Published Google Sheet (File > Share > Publish to web > CSV).

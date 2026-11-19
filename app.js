@@ -534,7 +534,7 @@
   }
   function letterhead(title) {
     const B = CFG.branding, now = new Date().toLocaleString("en-IN", { dateStyle: "long", timeStyle: "short" });
-    return `<div class="rep-head"><img src="${esc(B.logoLeft)}" alt=""><div><div class="rh-s">${esc(B.govLine)}</div><h2>${esc(B.titleSmall)}</h2><h4>${esc(title)}</h4></div><img src="${esc(B.logoRight)}" alt=""></div>
+    return `<div class="rep-head"><img src="${$("#logoLeft").src}" alt=""><div><div class="rh-s">${esc(B.govLine)}</div><h2>${esc(B.titleSmall)}</h2><h4>${esc(title)}</h4></div><img src="${$("#logoRight").src}" alt=""></div>
       <table class="rep-meta"><tr><th>Selection</th><td>${esc(filterSummary())}</td><th>Generated</th><td>${esc(now)}</td></tr></table>`;
   }
   function renderCustom() {
@@ -584,6 +584,7 @@
   }
   window.addEventListener("afterprint", () => { document.body.dataset.print = ""; });
   function wireBuilders() {
+    $("#rType").addEventListener("change", renderReport);
     document.querySelectorAll(".rtab").forEach((b) => b.addEventListener("click", () => {
       document.querySelectorAll(".rtab").forEach((x) => x.classList.toggle("on", x === b));
       document.querySelectorAll(".rpane").forEach((p) => (p.hidden = p.dataset.r !== b.dataset.r));
@@ -625,9 +626,22 @@
         const [d, rg] = k.split("\u0001");
         return [d || "(blank)", rg || "(blank)", l.length, ids(l).length, l.filter((r) => r.hasPhoto).length, l.filter((r) => !r.hasPhoto).length, ids(l).join(", ")]; }) });
     T.push({ title: "Section / Beat-wise summary",
-      headers: ["Range", "Section", "Beat", "Block", "Compt. No", "Records", "Individual tigers", "Tiger IDs"],
-      rows: [...group(f, (r) => [r.range, r.section, r.beat, r.block, r.compt].join("\u0001"))].sort((a, b) => natural(a[0], b[0])).map(([k, l]) =>
-        [...k.split("\u0001").map((x) => x || "–"), l.length, ids(l).length, ids(l).join(", ")]) });
+      headers: ["Division", "Range", "Section", "Beat", "Compartments", "Records", "Individual tigers", "With photo", "Tiger IDs"],
+      rows: [...group(f, (r) => [r.division, r.range, r.section, r.beat].join("\u0001"))].sort((a, b) => natural(a[0], b[0])).map(([k, l]) =>
+        [...k.split("\u0001").map((x) => x || "–"), uniq(l.map((r) => r.compt)).length, l.length, ids(l).length, l.filter((r) => r.hasPhoto).length, ids(l).join(", ")]) });
+    T.push({ title: "Compartment-wise summary",
+      headers: ["Range", "Beat", "Compt. No", "Records", "Individual tigers", "With photo", "Tiger IDs"],
+      rows: [...group(f, (r) => [r.range, r.beat, r.compt].join("\u0001"))].sort((a, b) => natural(a[0], b[0])).map(([k, l]) =>
+        [...k.split("\u0001").map((x) => x || "–"), l.length, ids(l).length, l.filter((r) => r.hasPhoto).length, ids(l).join(", ")]) });
+    {
+      const pr = [...group(f, (r) => r.division + "\u0001" + r.range)].sort((a, b) => natural(a[0], b[0])).map(([k, l]) => {
+        const [d, rg] = k.split("\u0001"), w = l.filter((r) => r.hasPhoto);
+        return [d || "–", rg || "–", w.length, l.length - w.length, l.length, l.length ? Math.round((100 * w.length) / l.length) + "%" : "–", ids(w).length];
+      });
+      const w = f.filter((r) => r.hasPhoto);
+      pr.push(["Total", "", w.length, f.length - w.length, f.length, f.length ? Math.round((100 * w.length) / f.length) + "%" : "–", ids(w).length]);
+      T.push({ title: "Photo / No-photo summary", headers: ["Division", "Range", "With photo", "Without photo", "Total records", "% with photo", "Tigers photographed"], rows: pr });
+    }
     T.push({ title: "Year / Month-wise summary",
       headers: ["Year", "Month", "Records", "Individual tigers", "With photo", "Tiger IDs"],
       rows: [...group(f, (r) => r.year + "\u0001" + r.month)].sort((a, b) => {
@@ -653,7 +667,7 @@
         rows: [...group(f, (r) => r.tigerId || "(blank)")].sort((a, b) => natural(a[0], b[0])).map(([t, l]) => [t, l[0].sex || "", ...years.map((y) => l.filter((r) => r.year === y).length || ""), l.length]) });
     }
     if (f.some((r) => r.evidence)) {
-      T.push({ title: "Abstract: Evidence type", headers: ["Evidence type", "Records", "Individual tigers", "With photo"],
+      T.push({ title: "Evidence-type summary", headers: ["Evidence type", "Records", "Individual tigers", "With photo"],
         rows: [...group(f, (r) => r.evidence || "(blank)")].sort((a, b) => b[1].length - a[1].length).map(([k, l]) => [k, l.length, ids(l).length, l.filter((r) => r.hasPhoto).length]) });
     }
     return T;
@@ -668,9 +682,18 @@
 
   function renderReport() {
     const f = state.filtered;
-    const tables = buildReportTables();
+    const all = buildReportTables();
+    all.push({ title: "Detailed record list", detail: true, headers: ["#", "Tiger ID", "Date / Period", "Evidence", "Division", "Range", "Section", "Beat", "Compt. No", "Latitude", "Longitude", "Photo"],
+      rows: f.map((r, n) => [n + 1, r.tigerId, r.dateText || period(r), r.evidence, r.division, r.range, r.section, r.beat, r.compt, r.hasCoord ? r.lat : "", r.hasCoord ? r.lon : "", r.photos[0] ? r.photos[0].url : r.hasPhoto ? "Yes" : "No"]) });
+    const sel = $("#rType");
+    const cur = sel.value;
+    sel.innerHTML = `<option value="">All summaries (full abstract report)</option>` + all.map((t) => `<option ${t.title === cur ? "selected" : ""}>${esc(t.title)}</option>`).join("");
+    const picked = cur ? all.filter((t) => t.title === cur) : all;
+    const tables = picked.filter((t) => !t.detail);
+    const showDetail = picked.some((t) => t.detail);
     const now = new Date().toLocaleString("en-IN", { dateStyle: "long", timeStyle: "short" });
     const B = CFG.branding;
+    const repTitle = cur || "Detailed Abstract Report";
     const detail = f.map((r, n) => {
       const pics = r.photos.slice(0, 3).map((p) => imgTag(p, "rthumb")).join("");
       return `<tr><td>${n + 1}</td><td><b>${esc(r.tigerId)}</b></td><td>${esc(r.dateText || period(r))}</td><td>${esc(r.division)}</td><td>${esc(r.range)}</td><td>${esc(r.section)}</td><td>${esc(r.beat)}</td><td>${esc(r.block)}</td><td>${esc(r.compt)}</td>
@@ -678,16 +701,16 @@
     }).join("");
     $("#report").innerHTML = `<div class="paper">
       <div class="rep-head">
-        <img src="${esc(B.logoLeft)}" alt=""><div><div class="rh-s">${esc(B.govLine)}</div><h2>${esc(B.titleSmall)}</h2><h4>${esc(B.titleMain)} – Detailed Report</h4></div><img src="${esc(B.logoRight)}" alt="">
+        <img src="${$("#logoLeft").src}" alt=""><div><div class="rh-s">${esc(B.govLine)}</div><h2>${esc(B.titleSmall)}</h2><h4>${esc(B.titleMain)} – ${esc(repTitle)}</h4></div><img src="${$("#logoRight").src}" alt="">
       </div>
       <table class="rep-meta"><tr><th>Selection</th><td>${esc(filterSummary())}</td><th>Generated</th><td>${esc(now)}</td></tr></table>
       <div class="rep-kpis">${kpiData().map(([l, v]) => `<div><b>${v}</b><span>${l}</span></div>`).join("")}</div>
       ${tables.map((t, i) => tableHtml(t, i + 1)).join("")}
-      <h3><span class="num">${tables.length + 1}</span>Record details (${f.length})</h3>
-      <div class="table-wrap"><table class="data detail"><thead><tr><th>#</th><th>Tiger ID</th><th>Date / Period</th><th>Division</th><th>Range</th><th>Section</th><th>Beat</th><th>Block</th><th>Compt</th><th>Lat, Long</th><th>Photo</th></tr></thead><tbody>${detail}</tbody></table></div>
+      ${showDetail ? `<h3><span class="num">${tables.length + 1}</span>Detailed record list (${f.length})</h3>
+      <div class="table-wrap"><table class="data detail"><thead><tr><th>#</th><th>Tiger ID</th><th>Date / Period</th><th>Division</th><th>Range</th><th>Section</th><th>Beat</th><th>Block</th><th>Compt</th><th>Lat, Long</th><th>Photo</th></tr></thead><tbody>${detail}</tbody></table></div>` : ""}
       <div class="signs"><div>Prepared by</div><div>Verified by<br><small>Field Director, Amrabad Tiger Reserve</small></div></div>
     </div>`;
-    state.reportTables = tables;
+    state.reportTables = picked;
   }
 
   // ---------- records table ----------
@@ -717,7 +740,7 @@
     const info = [[CFG.branding.titleSmall + " – " + CFG.branding.titleMain], ["Selection", filterSummary()], ["Generated", new Date().toLocaleString("en-IN")], [], ...kpiData().map(([l, v]) => [l, v])];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(info), "Summary");
     (state.reportTables || []).forEach((t) => XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([t.headers, ...t.rows]), t.title.replace(/[\\/?*[\]:×]/g, "").slice(0, 31)));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(filteredAoA()), "Records");
+    if (!$("#rType").value) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(filteredAoA()), "All sheet columns");
     XLSX.writeFile(wb, `ATR_tiger_report_${stamp()}.xlsx`);
   }
 
@@ -745,7 +768,8 @@
     const B = CFG.branding;
     $("#govLine").textContent = B.govLine; $("#titleSmall").textContent = B.titleSmall;
     $("#titleMain").textContent = B.titleMain; $("#titleSub").textContent = B.titleSub;
-    $("#logoLeft").src = B.logoLeft; $("#logoRight").src = B.logoRight;
+    if (B.logoLeft) $("#logoLeft").src = B.logoLeft;
+    if (B.logoRight) $("#logoRight").src = B.logoRight;
     document.title = B.titleSmall + " – " + B.titleMain;
     $("#yr").textContent = new Date().getFullYear();
     const tick = () => ($("#clock").textContent = new Date().toLocaleString("en-IN", { weekday: "short", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }));
