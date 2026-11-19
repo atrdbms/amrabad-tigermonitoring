@@ -30,6 +30,14 @@ window.ATR_CONFIG = {
   // Columns ticked by default in the custom report builder.
   customDefaultColumns: ["Sl_No", "Date", "Tiger_ID", "Tiger_evid", "Division", "Range", "Section", "Beat", "Compt_No", "Latitude", "Longitude", "photo_URL"],
 
+  // Boundary layers (KML) shown to everyone. Upload the .kml files to the same GitHub
+  // repository (e.g. a folder named kml) and list them here, for example:
+  //   { name: "ATR boundary", url: "kml/ATR_boundary.kml" },
+  //   { name: "Beats", url: "kml/ATR_beats.kml" },
+  // Anyone can also upload a KML/KMZ on the GIS Map page (kept in their browser only).
+  kmlLayers: [
+  ],
+
   // Map starts here before the records are plotted (Amrabad TR, Telangana).
   mapCenter: [16.35, 78.85],
   mapZoom: 10,

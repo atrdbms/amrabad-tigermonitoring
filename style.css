@@ -285,3 +285,34 @@ table.pivot tr.tot td, table.pivot td:last-child { font-weight: 700; background:
 .rtype-bar { display: flex; align-items: center; gap: 12px; padding: 10px 14px; flex-wrap: wrap; }
 .rtype-bar label { font-weight: 800; color: var(--g800); }
 .rtype-bar select { min-width: 340px; padding: 8px 10px; border: 2px solid var(--g600); border-radius: 6px; font: inherit; font-weight: 600; color: var(--g900); background: #f1f8ee; }
+
+/* ---------- legend with tiger selection ---------- */
+.map-legend { width: 230px; max-height: calc(100% - 120px); display: flex; flex-direction: column; padding: 0; overflow: hidden; bottom: 28px; }
+.map-legend .lg-title { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; margin: 0; background: var(--g700); color: #fff; }
+.map-legend .lg-title small { font-weight: 500; opacity: .85; text-transform: none; letter-spacing: 0; }
+.lg-col { background: none; border: 0; color: #fff; cursor: pointer; font-size: 12px; }
+.map-legend.collapsed .lg-body { display: none; }
+.lg-body { display: flex; flex-direction: column; min-height: 0; padding: 6px 10px 8px; }
+.lg-btns { display: flex; gap: 6px; margin-bottom: 6px; }
+.lg-btns button { flex: 1; border: 1px solid #c8d1c2; background: #f6f8f4; border-radius: 5px; padding: 3px 0; cursor: pointer; font-size: 11.5px; color: var(--g700); font-weight: 600; }
+.lg-btns button:hover { background: var(--g100); }
+.lg-list { overflow-y: auto; min-height: 0; max-height: 300px; }
+.lg-item { display: flex; align-items: center; gap: 4px; padding: 2px 0; cursor: pointer; }
+.lg-item span { flex: 1; }
+.lg-item small { color: var(--muted); }
+.lg-item input { margin: 0 4px 0 0; }
+.lg-foot { display: flex; gap: 12px; border-top: 1px solid var(--line); margin-top: 6px; padding-top: 5px; color: var(--muted); }
+.cam-mini { font-style: normal; margin-right: 3px; }
+
+/* ---------- KML layers ---------- */
+.kml-ctl { width: 230px; }
+.kml-up { margin: 5px 0 6px; width: 100%; justify-content: center; cursor: pointer; }
+#kmlList { max-height: 180px; overflow-y: auto; }
+.kml-item { display: flex; align-items: center; gap: 4px; padding: 2px 0; }
+.kml-item label { flex: 1; display: flex !important; align-items: center; gap: 3px; min-width: 0; }
+.kml-item label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kml-item small { color: var(--muted); }
+.kml-item button { border: 0; background: #eef1ec; border-radius: 4px; cursor: pointer; padding: 1px 6px; }
+.kml-item button:hover { background: var(--or); color: #fff; }
+#kmlMsg { color: var(--warn); margin-top: 3px; }
+.kdesc { font-size: 12px; margin-top: 4px; }

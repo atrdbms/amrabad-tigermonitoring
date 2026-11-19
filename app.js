@@ -371,6 +371,22 @@
     $("#pathToggle").addEventListener("change", (e) => { showPaths = e.target.checked; renderMaps(false); });
     $("#clusterToggle").addEventListener("change", (e) => { cluster.options.disableClusteringAtZoom = e.target.checked ? 15 : 1; renderMaps(false); });
 
+    // legend: show / hide tigers
+    $("#mapNote").addEventListener("change", (e) => {
+      const t = e.target.dataset.tg; if (t === undefined) return;
+      e.target.checked ? state.hiddenTigers.delete(t) : state.hiddenTigers.add(t); renderMaps(false);
+    });
+    $("#mapNote").addEventListener("click", (e) => {
+      const a = e.target.dataset.lg; if (!a) return;
+      const all = uniq(state.filtered.filter((r) => r.hasCoord).map((r) => r.tigerId));
+      if (a === "all") state.hiddenTigers.clear();
+      if (a === "none") all.forEach((t) => state.hiddenTigers.add(t));
+      if (a === "toggle") $("#mapNote").classList.toggle("collapsed");
+      renderMaps(false);
+    });
+    L.DomEvent.disableClickPropagation($("#mapNote")); L.DomEvent.disableScrollPropagation($("#mapNote"));
+    initKml();
+
     mini = L.map("miniMap", { zoomControl: true, attributionControl: true, scrollWheelZoom: false }).setView(CFG.mapCenter, CFG.mapZoom);
     baseLayers()["Google Satellite (labels)"].addTo(mini);
     miniLayer = L.layerGroup().addTo(mini);
@@ -402,7 +418,9 @@
   function renderMaps(fit) {
     if (!map) return;
     cluster.clearLayers(); pathLayer.clearLayers(); miniLayer.clearLayers();
-    const pts = state.filtered.filter((r) => r.hasCoord);
+    const allPts = state.filtered.filter((r) => r.hasCoord);
+    const hidden = state.hiddenTigers || (state.hiddenTigers = new Set());
+    const pts = allPts.filter((r) => !hidden.has(r.tigerId));
     cluster.addLayers(pts.map(marker));
     pts.forEach((r) => marker(r).addTo(miniLayer));
     if (showPaths) {
@@ -416,12 +434,131 @@
       const b = L.latLngBounds(pts.map((r) => [r.lat, r.lon])).pad(0.15);
       map.fitBounds(b, { maxZoom: 15 }); mini.fitBounds(b, { maxZoom: 14 });
     }
-    const noCoord = state.filtered.length - pts.length;
-    const tigers = ids(pts).slice(0, 30);
-    $("#mapNote").innerHTML = `<div class="lg-title">Legend</div>` +
-      tigers.map((t) => `<div><i class="lg" style="background:${colorFor(t)}"></i>${esc(t)}</div>`).join("") +
-      `<div><i class="lg ring"></i>With photo</div>` +
-      (noCoord ? `<div class="warn">${noCoord} record(s) without valid Lat/Long</div>` : "");
+    const noCoord = state.filtered.length - allPts.length;
+    const byT = group(allPts, (r) => r.tigerId);
+    const tigers = [...byT.keys()].sort(natural);
+    const shown = tigers.filter((t) => !hidden.has(t)).length;
+    const collapsed = $("#mapNote").classList.contains("collapsed");
+    $("#mapNote").innerHTML = `<div class="lg-title"><span>Legend · Tiger ID <small>(${shown}/${tigers.length} shown)</small></span><button class="lg-col" data-lg="toggle" title="Collapse">${collapsed ? "▲" : "▼"}</button></div>
+      <div class="lg-body">
+        <div class="lg-btns"><button data-lg="all">Select all</button><button data-lg="none">Clear all</button></div>
+        <div class="lg-list">${tigers.map((t) => `<label class="lg-item"><input type="checkbox" data-tg="${esc(t)}" ${hidden.has(t) ? "" : "checked"}><i class="lg" style="background:${colorFor(t)}"></i><span>${esc(t || "(no ID)")}</span><small>${byT.get(t).length}</small></label>`).join("")}</div>
+        <div class="lg-foot"><span><i class="cam-mini">📷</i>With photo</span><span><i class="lg" style="background:#888"></i>No photo</span></div>
+        ${noCoord ? `<div class="warn">${noCoord} record(s) without valid Lat/Long</div>` : ""}
+      </div>`;
+  }
+
+  // ---------- KML / KMZ overlays ----------
+  const KML_COLORS = ["#ffeb3b", "#00e5ff", "#ff4081", "#76ff03", "#ff9100", "#e040fb", "#ffffff"];
+  const kmlLayers = []; // {id, name, layer, color, on}
+  function kmlColor(c) { // KML aabbggrr → #rrggbb
+    const m = /^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec((c || "").trim());
+    return m ? `#${m[4]}${m[3]}${m[2]}` : null;
+  }
+  function parseCoordsText(t) {
+    return (t || "").trim().split(/\s+/).map((x) => x.split(",").map(Number)).filter((a) => a.length >= 2 && isFinite(a[0]) && isFinite(a[1])).map((a) => [a[1], a[0]]);
+  }
+  function kmlToLayer(text, color) {
+    const doc = new DOMParser().parseFromString(text, "text/xml");
+    if (doc.getElementsByTagName("parsererror").length) throw new Error("This file is not valid KML.");
+    const styles = {};
+    [...doc.getElementsByTagName("Style")].forEach((st) => {
+      const id = st.getAttribute("id"); if (!id) return;
+      const lc = st.querySelector("LineStyle > color"), pc = st.querySelector("PolyStyle > color");
+      styles["#" + id] = { line: lc && kmlColor(lc.textContent), poly: pc && kmlColor(pc.textContent) };
+    });
+    [...doc.getElementsByTagName("StyleMap")].forEach((sm) => {
+      const id = sm.getAttribute("id"); const n = [...sm.getElementsByTagName("Pair")].find((p) => (p.querySelector("key") || {}).textContent === "normal");
+      const u = n && n.querySelector("styleUrl"); if (id && u && styles[u.textContent.trim()]) styles["#" + id] = styles[u.textContent.trim()];
+    });
+    const fg = L.featureGroup(); let count = 0;
+    [...doc.getElementsByTagName("Placemark")].forEach((pm) => {
+      const name = (pm.querySelector("name") || {}).textContent || "";
+      const descEl = pm.querySelector("description");
+      const data = [...pm.querySelectorAll("ExtendedData Data, ExtendedData SimpleData")].map((d) => [d.getAttribute("name"), (d.querySelector("value") || d).textContent.trim()]).filter((x) => x[1]);
+      const su = (pm.querySelector("styleUrl") || {}).textContent; const st = (su && styles[su.trim()]) || {};
+      const lineCol = st.line || color, fillCol = st.poly || color;
+      const popup = `<div class="popup"><div class="pop-h" style="--c:${lineCol}">${esc(name || "Feature")}</div>` +
+        (data.length ? `<table>${data.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join("")}</table>` : "") +
+        (descEl && !data.length ? `<div class="kdesc">${esc(descEl.textContent.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()).slice(0, 600)}</div>` : "") + `</div>`;
+      const add = (ly) => { ly.bindPopup(popup, { maxWidth: 340 }); if (name) ly.bindTooltip(esc(name), { sticky: true }); fg.addLayer(ly); count++; };
+      [...pm.getElementsByTagName("Polygon")].forEach((pg) => {
+        const outer = parseCoordsText((pg.querySelector("outerBoundaryIs coordinates") || {}).textContent);
+        const inner = [...pg.querySelectorAll("innerBoundaryIs coordinates")].map((c) => parseCoordsText(c.textContent));
+        if (outer.length > 2) add(L.polygon([outer, ...inner], { color: lineCol, weight: 2.5, fillColor: fillCol, fillOpacity: 0.08 }));
+      });
+      [...pm.getElementsByTagName("LineString")].forEach((ls) => {
+        const c = parseCoordsText((ls.querySelector("coordinates") || {}).textContent);
+        if (c.length > 1) add(L.polyline(c, { color: lineCol, weight: 2.5 }));
+      });
+      [...pm.getElementsByTagName("Point")].forEach((pt) => {
+        const c = parseCoordsText((pt.querySelector("coordinates") || {}).textContent)[0];
+        if (c) add(L.circleMarker(c, { radius: 5, color: "#000", weight: 1, fillColor: lineCol, fillOpacity: 1 }));
+      });
+    });
+    if (!count) throw new Error("No polygons, lines or points were found in this file.");
+    return { layer: fg, count };
+  }
+  async function readKmlFile(file) {
+    if (/\.kmz$/i.test(file.name)) {
+      if (!window.JSZip) throw new Error("KMZ support could not load. Try a .kml file.");
+      const zip = await JSZip.loadAsync(file);
+      const kml = Object.values(zip.files).find((f) => /\.kml$/i.test(f.name));
+      if (!kml) throw new Error("No .kml file inside this KMZ.");
+      return kml.async("string");
+    }
+    return file.text();
+  }
+  function addKml(name, text, opts = {}) {
+    const color = KML_COLORS[kmlLayers.length % KML_COLORS.length];
+    const { layer, count } = kmlToLayer(text, color);
+    const item = { id: "k" + Date.now() + Math.random().toString(36).slice(2, 6), name, layer, color, count, on: true, fixed: !!opts.fixed };
+    layer.addTo(map); kmlLayers.push(item);
+    if (!opts.noZoom) map.fitBounds(layer.getBounds(), { maxZoom: 15 });
+    if (!opts.fixed && !opts.restored) { try { const saved = JSON.parse(localStorage.getItem("atr_kml") || "[]"); saved.push({ name, text }); localStorage.setItem("atr_kml", JSON.stringify(saved)); } catch (e) { /* too large to remember */ } }
+    renderKmlList();
+  }
+  function renderKmlList() {
+    $("#kmlList").innerHTML = kmlLayers.length ? kmlLayers.map((k) => `<div class="kml-item">
+        <label><input type="checkbox" data-kon="${k.id}" ${k.on ? "checked" : ""}><i class="lg" style="background:${k.color}"></i><span title="${esc(k.name)}">${esc(k.name)}</span></label>
+        <small>${k.count}</small><button data-kzoom="${k.id}" title="Zoom to layer">⌖</button>${k.fixed ? "" : `<button data-kdel="${k.id}" title="Remove layer">✕</button>`}</div>`).join("")
+      : `<div class="muted small">No boundary layers yet.</div>`;
+  }
+  function initKml() {
+    const Ctl = L.Control.extend({ onAdd() {
+      const d = L.DomUtil.create("div", "leaflet-bar map-toggle kml-ctl");
+      d.innerHTML = `<b>Boundary layers (KML)</b>
+        <label class="btn sm kml-up">📂 Upload KML / KMZ<input type="file" id="kmlFile" accept=".kml,.kmz" multiple hidden></label>
+        <div id="kmlList"></div><div id="kmlMsg" class="small"></div>`;
+      L.DomEvent.disableClickPropagation(d); L.DomEvent.disableScrollPropagation(d); return d;
+    } });
+    map.addControl(new Ctl({ position: "topleft" }));
+    renderKmlList();
+    $("#kmlFile").addEventListener("change", async (e) => {
+      for (const f of e.target.files) {
+        try { addKml(f.name.replace(/\.(kml|kmz)$/i, ""), await readKmlFile(f)); $("#kmlMsg").textContent = ""; }
+        catch (err) { $("#kmlMsg").textContent = `${f.name}: ${err.message}`; }
+      }
+      e.target.value = "";
+    });
+    $("#kmlList").addEventListener("change", (e) => {
+      const k = kmlLayers.find((x) => x.id === e.target.dataset.kon); if (!k) return;
+      k.on = e.target.checked; k.on ? k.layer.addTo(map) : map.removeLayer(k.layer);
+    });
+    $("#kmlList").addEventListener("click", (e) => {
+      const z = kmlLayers.find((x) => x.id === e.target.dataset.kzoom);
+      if (z) { if (!z.on) { z.on = true; z.layer.addTo(map); renderKmlList(); } map.fitBounds(z.layer.getBounds(), { maxZoom: 15 }); return; }
+      const i = kmlLayers.findIndex((x) => x.id === e.target.dataset.kdel);
+      if (i >= 0) {
+        const [k] = kmlLayers.splice(i, 1); map.removeLayer(k.layer);
+        try { const saved = JSON.parse(localStorage.getItem("atr_kml") || "[]").filter((x) => x.name !== k.name); localStorage.setItem("atr_kml", JSON.stringify(saved)); } catch (er) { /* ignore */ }
+        renderKmlList();
+      }
+    });
+    // layers shipped with the site (config.js → kmlLayers), then ones uploaded earlier in this browser
+    (CFG.kmlLayers || []).forEach((k) => fetch(k.url).then((r) => (r.ok ? r.text() : Promise.reject(r.status)))
+      .then((t) => addKml(k.name, t, { fixed: true, noZoom: true })).catch(() => { $("#kmlMsg").textContent = `Could not load ${k.url}`; }));
+    try { JSON.parse(localStorage.getItem("atr_kml") || "[]").forEach((k) => addKml(k.name, k.text, { restored: true, noZoom: true })); } catch (e) { /* ignore */ }
   }
 
   // ---------- profiles ----------

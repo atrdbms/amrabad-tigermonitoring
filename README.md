@@ -74,3 +74,12 @@ The Abstract Reports page has three tabs, all following the current filters:
 - **Custom report** – tick the columns you want, choose sort order, then Excel / CSV / Print-PDF.
   Default ticked columns are set in `config.js` → `customDefaultColumns`.
 - **Pivot abstract** – count records or individual tigers by any two columns (e.g. Range × Year).
+
+## GIS Map tools
+- **Legend · Tiger ID** (bottom-right): tick or untick tigers to show or hide them on the map;
+  *Select all* / *Clear all* buttons; ▼ collapses the legend.
+- **Boundary layers (KML)** (top-left): *Upload KML / KMZ* adds reserve, range, beat or compartment
+  boundaries over the satellite image. Each layer can be switched on/off, zoomed to (⌖) or removed (✕).
+  Click a boundary to see its name and attributes. Uploaded layers are remembered in that browser.
+- To show boundaries to **everyone**, upload the .kml files to the GitHub repository (e.g. a `kml`
+  folder) and list them in `config.js` → `kmlLayers`, e.g. `{ name: "Beats", url: "kml/ATR_beats.kml" }`.
