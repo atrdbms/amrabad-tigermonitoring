@@ -83,11 +83,13 @@
     return parts.map((url) => {
       const id = (url.match(/\/d\/([\w-]{20,})/) || url.match(/[?&]id=([\w-]{20,})/) || [])[1];
       if (id && /google\.com/.test(url)) {
-        return { url, thumb: `https://drive.google.com/thumbnail?id=${id}&sz=w600`, big: `https://drive.google.com/thumbnail?id=${id}&sz=w1600` };
+        return { url, thumb: `https://drive.google.com/thumbnail?id=${id}&sz=w800`, big: `https://drive.google.com/thumbnail?id=${id}&sz=w1600`,
+                 alt: `https://lh3.googleusercontent.com/d/${id}=w800` };
       }
-      return { url, thumb: url, big: url };
+      return { url, thumb: url, big: url, alt: "" };
     });
   }
+  const imgTag = (p, cls, alt = "") => `<img class="pthumb ${cls || ""}" loading="lazy" src="${esc(p.thumb)}" data-alt="${esc(p.alt || "")}" data-big="${esc(p.big)}" data-url="${esc(p.url)}" alt="${esc(alt)}">`;
 
   // Distinct colours per tiger (no yellow: yellow ring marks "with photo").
   const PALETTE = ["#e6194b","#3cb44b","#4363d8","#f58231","#911eb4","#42d4f4","#f032e6","#9a6324","#469990","#800000","#000075","#bfef45","#fabed4","#dcbeff","#aaffc3","#a9a9a9"];
@@ -155,6 +157,7 @@
 
     tigerColor.clear(); uniq(state.records.map((r) => r.tigerId)).sort(natural).forEach(colorFor);
     buildFilterFields();
+    setupBuilders();
     applyFilters(true);
     const missing = CFG.filterOrder.filter((k) => !col[k]).map((k) => CFG.labels[k]);
     if (!col.lat || !col.lon) if (!col.combo) missing.push("Latitude/Longitude");
@@ -236,6 +239,8 @@
     renderMaps(fit);
     renderProfiles();
     renderReport();
+    renderCustom();
+    renderPivot();
     renderRecords();
   }
 
@@ -372,18 +377,22 @@
   }
 
   function marker(r) {
-    const m = L.circleMarker([r.lat, r.lon], { radius: 8, weight: r.hasPhoto ? 3 : 2, color: r.hasPhoto ? "#ffd400" : "#fff", fillColor: colorFor(r.tigerId), fillOpacity: 0.95 });
-    m.bindPopup(() => popupHtml(r), { maxWidth: 360, minWidth: 270 });
-    m.bindTooltip(esc(r.tigerId || "Unknown") + (r.month ? " · " + esc(r.month) + " " + esc(r.year) : ""));
+    const m = r.hasPhoto
+      ? L.marker([r.lat, r.lon], { icon: L.divIcon({ className: "cam-pin", html: `<div style="--c:${colorFor(r.tigerId)}"><span>📷</span></div>`, iconSize: [30, 38], iconAnchor: [15, 36], popupAnchor: [0, -32] }) })
+      : L.circleMarker([r.lat, r.lon], { radius: 7, weight: 2, color: "#fff", fillColor: colorFor(r.tigerId), fillOpacity: 0.95 });
+    m.bindPopup(() => popupHtml(r), { maxWidth: 380, minWidth: 300 });
+    m.bindTooltip(esc(r.tigerId || "Unknown") + (r.month ? " · " + esc(r.month) + " " + esc(r.year) : "") + (r.hasPhoto ? " · 📷 click to view photo" : ""));
     return m;
   }
 
   function popupHtml(r) {
-    const skip = new Set([state.col.photo, state.col.lat, state.col.lon].filter(Boolean));
+    const skip = new Set([state.col.photo, state.col.photoName, state.col.lat, state.col.lon].filter(Boolean));
     const rows = state.headers.filter((h) => !skip.has(h) && String(r.raw[h] ?? "").trim() !== "")
       .map((h) => `<tr><th>${esc(h)}</th><td>${esc(r.raw[h])}</td></tr>`).join("");
-    const pics = r.photos.map((p) => `<img class="pthumb" loading="lazy" src="${esc(p.thumb)}" data-big="${esc(p.big)}" data-url="${esc(p.url)}" alt="Photo of ${esc(r.tigerId)}">`).join("");
-    const photoBlock = pics ? `<div class="pgal">${pics}</div>` : `<div class="nophoto">${r.hasPhoto ? "Photo: " + esc(r.raw[state.col.photo]) : "No photo"}</div>`;
+    const pics = r.photos.map((p) => imgTag(p, "pop-img", "Photo of " + r.tigerId)).join("");
+    const nameTxt = r.photoName ? `<div class="pcap">${esc(r.photoName.split("/").pop())} · click photo to enlarge</div>` : `<div class="pcap">Click photo to enlarge</div>`;
+    const photoBlock = pics ? `<div class="pgal">${pics}</div>${nameTxt}`
+      : `<div class="nophoto">${r.hasPhoto ? "📷 Photo recorded: " + esc(r.photoName || r.raw[state.col.photo] || "") + " (no link in photo_URL)" : "No photo for this record"}</div>`;
     return `<div class="popup">
       <div class="pop-h" style="--c:${colorFor(r.tigerId)}">${esc(r.tigerId || "Unknown tiger")}<small>${esc(r.dateText || period(r))}</small></div>
       <div class="coords">${r.lat.toFixed(5)}° N, ${r.lon.toFixed(5)}° E · <a target="_blank" rel="noopener" href="https://www.google.com/maps?q=${r.lat},${r.lon}&t=k">Google Maps ↗</a></div>
@@ -419,12 +428,15 @@
   function renderProfiles() {
     const by = group(state.filtered, (r) => r.tigerId || "(blank)");
     const cards = [...by].sort((a, b) => natural(a[0], b[0])).map(([id, l]) => {
-      const pic = l.slice().reverse().flatMap((r) => r.photos)[0];
+      const prof = profilePhotoFor(id);
+      const pic = prof || l.slice().reverse().flatMap((r) => r.photos)[0];
       const first = l[0], last = l[l.length - 1];
       const sexCol = state.headers.find((h) => /^(sex|gender)$/i.test(h));
       const sexTxt = first.sex || (sexCol ? first.raw[sexCol] : "");
       return `<div class="profile" style="--c:${colorFor(id)}">
-        <div class="ph">${pic ? `<img class="pthumb" loading="lazy" src="${esc(pic.thumb)}" data-big="${esc(pic.big)}" data-url="${esc(pic.url)}" alt="${esc(id)}">` : `<span>🐅</span>`}</div>
+        <div class="ph">${pic ? imgTag(pic, "", id) : `<span>🐅</span>`}
+          <button class="ph-set" data-setphoto="${esc(id)}" title="Set profile photo">📷 ${prof ? "Change" : "Set"} photo</button>
+          ${prof ? `<span class="ph-tag">Profile photo</span>` : pic ? `<span class="ph-tag">Latest record photo</span>` : ""}</div>
         <div class="pb">
           <h3>${esc(id)}${sexTxt ? ` <small>${esc(sexTxt)}</small>` : ""}</h3>
           <dl>
@@ -434,10 +446,160 @@
             <dt>Ranges</dt><dd>${esc(uniq(l.map((r) => r.range)).join(", ") || "–")}</dd>
             <dt>Beats</dt><dd>${esc(uniq(l.map((r) => r.beat)).join(", ") || "–")}</dd>
           </dl>
+          ${state.profileInfo[id] && state.profileInfo[id].name ? `<p class="pname">“${esc(state.profileInfo[id].name)}”${state.profileInfo[id].remarks ? " – " + esc(state.profileInfo[id].remarks) : ""}</p>` : ""}
           <button class="btn sm" data-tiger="${esc(id)}">Show on map</button>
         </div></div>`;
     });
     $("#profiles").innerHTML = cards.join("") || `<p class="muted">No tigers for this selection.</p>`;
+  }
+
+  // ---------- profile photos ----------
+  // priority: set in this browser > Tiger_Profiles sheet tab > config.js > latest record photo
+  const LS_KEY = "atr_profile_photos";
+  const localPhotos = () => { try { return JSON.parse(localStorage.getItem(LS_KEY) || "{}"); } catch (e) { return {}; } };
+  function profilePhotoFor(id) {
+    const local = localPhotos()[id];
+    if (local) return local.startsWith("data:") ? { url: local, thumb: local, big: local, alt: "" } : photoLinks(local)[0];
+    const sheet = state.profileInfo[id] && state.profileInfo[id].photo;
+    const conf = (CFG.profilePhotos || {})[id];
+    const u = sheet || conf;
+    return u ? photoLinks(u)[0] : null;
+  }
+  function loadProfiles() {
+    state.profileInfo = {};
+    if (!CFG.profileCsvUrl) return;
+    Papa.parse(CFG.profileCsvUrl + (CFG.profileCsvUrl.includes("?") ? "&" : "?") + "_=" + Date.now(), {
+      download: true, header: true, skipEmptyLines: "greedy", transformHeader: (h) => h.trim(),
+      complete: (res) => {
+        const H = res.meta.fields || [];
+        const c = { id: findColumn(H, ["Tiger_ID", "Tiger ID", "Tiger"]), photo: findColumn(H, ["Profile_Photo_URL", "Profile Photo", "Photo_URL", "Photo"]),
+                    name: findColumn(H, ["Name", "Tiger Name"]), remarks: findColumn(H, ["Remarks", "Notes"]) };
+        res.data.forEach((r) => { const id = String(r[c.id] || "").trim(); if (id) state.profileInfo[id] = { photo: String(r[c.photo] || "").trim(), name: c.name ? r[c.name] : "", remarks: c.remarks ? r[c.remarks] : "" }; });
+        renderProfiles();
+      },
+    });
+  }
+  let pmTiger = null, pmData = null;
+  function openPhotoModal(id) {
+    pmTiger = id; pmData = null;
+    $("#pmTiger").textContent = id; $("#pmUrl").value = ""; $("#pmFile").value = "";
+    const cur = profilePhotoFor(id);
+    $("#pmImg").src = cur ? cur.thumb : ""; $("#pmImg").hidden = !cur;
+    $("#photoModal").hidden = false;
+  }
+  function resizeToDataUrl(file, max = 700) {
+    return new Promise((res, rej) => {
+      const fr = new FileReader();
+      fr.onload = () => { const im = new Image(); im.onload = () => {
+        const k = Math.min(1, max / Math.max(im.width, im.height)); const cv = document.createElement("canvas");
+        cv.width = Math.round(im.width * k); cv.height = Math.round(im.height * k);
+        cv.getContext("2d").drawImage(im, 0, 0, cv.width, cv.height); res(cv.toDataURL("image/jpeg", 0.85)); }; im.onerror = rej; im.src = fr.result; };
+      fr.onerror = rej; fr.readAsDataURL(file);
+    });
+  }
+  function wirePhotoModal() {
+    $("#pmClose").onclick = () => ($("#photoModal").hidden = true);
+    $("#pmUrl").oninput = (e) => { const p = photoLinks(e.target.value.trim())[0]; pmData = p ? e.target.value.trim() : null; if (p) { $("#pmImg").src = p.thumb; $("#pmImg").dataset.alt = p.alt || ""; $("#pmImg").hidden = false; } };
+    $("#pmImg").onerror = (e) => { const i = e.target; if (i.dataset.alt) { i.src = i.dataset.alt; i.dataset.alt = ""; } };
+    $("#pmFile").onchange = async (e) => { const f = e.target.files[0]; if (!f) return; pmData = await resizeToDataUrl(f); $("#pmImg").src = pmData; $("#pmImg").hidden = false; };
+    $("#pmSave").onclick = () => {
+      if (!pmData) { $("#photoModal").hidden = true; return; }
+      const all = localPhotos(); all[pmTiger] = pmData;
+      try { localStorage.setItem(LS_KEY, JSON.stringify(all)); } catch (e) { alert("Browser storage is full – use a smaller photo or a link."); return; }
+      $("#photoModal").hidden = true; renderProfiles();
+    };
+    $("#pmRemove").onclick = () => { const all = localPhotos(); delete all[pmTiger]; localStorage.setItem(LS_KEY, JSON.stringify(all)); $("#photoModal").hidden = true; renderProfiles(); };
+  }
+
+  // ---------- custom report builder & pivot ----------
+  let customOn = false, pivotOn = false;
+  function setupBuilders() {
+    const H = state.headers;
+    const def = new Set((CFG.customDefaultColumns || []).map(norm));
+    const prev = new Set([...document.querySelectorAll("#colPick input:checked")].map((i) => i.value));
+    $("#colPick").innerHTML = H.map((h) => `<label><input type="checkbox" value="${esc(h)}" ${(prev.size ? prev.has(h) : def.has(norm(h))) ? "checked" : ""}> ${esc(h)}</label>`).join("");
+    const opts = H.map((h) => `<option value="${esc(h)}">${esc(h)}</option>`).join("");
+    $("#cSort").innerHTML = `<option value="">(sheet order / date)</option>` + opts;
+    const keep = (sel, v) => { const old = sel.value; sel.innerHTML = opts; sel.value = old || v; };
+    keep($("#pRows"), state.col.tigerId || H[0]);
+    $("#pCols").innerHTML = `<option value="">(none – single total column)</option>` + opts;
+    if (!$("#pCols").dataset.init) { $("#pCols").value = state.col.year || ""; $("#pCols").dataset.init = 1; }
+  }
+  function customData() {
+    const cols = [...document.querySelectorAll("#colPick input:checked")].map((i) => i.value);
+    let list = state.filtered.slice();
+    const sk = $("#cSort").value, dir = +$("#cDir").value;
+    if (sk) list.sort((a, b) => dir * natural(a.raw[sk] ?? "", b.raw[sk] ?? "")); else if (dir < 0) list.reverse();
+    return { cols, list };
+  }
+  function letterhead(title) {
+    const B = CFG.branding, now = new Date().toLocaleString("en-IN", { dateStyle: "long", timeStyle: "short" });
+    return `<div class="rep-head"><img src="${esc(B.logoLeft)}" alt=""><div><div class="rh-s">${esc(B.govLine)}</div><h2>${esc(B.titleSmall)}</h2><h4>${esc(title)}</h4></div><img src="${esc(B.logoRight)}" alt=""></div>
+      <table class="rep-meta"><tr><th>Selection</th><td>${esc(filterSummary())}</td><th>Generated</th><td>${esc(now)}</td></tr></table>`;
+  }
+  function renderCustom() {
+    if (!customOn) return;
+    const { cols, list } = customData();
+    if (!cols.length) { $("#customOut").innerHTML = `<p class="muted">Tick at least one column.</p>`; return; }
+    const photos = $("#cPhotos").checked, pc = state.col.photo;
+    const body = list.map((r, n) => `<tr><td>${n + 1}</td>${cols.map((h) => {
+      if (photos && h === pc && r.photos.length) return `<td>${r.photos.slice(0, 2).map((p) => imgTag(p, "rthumb")).join("")}</td>`;
+      return `<td>${esc(r.raw[h])}</td>`; }).join("")}</tr>`).join("");
+    $("#customOut").innerHTML = `<div class="paper">${letterhead($("#cTitle").value || "Custom report")}
+      <p class="muted small">${list.length} records · ${cols.length} columns</p>
+      <div class="table-wrap"><table class="data"><thead><tr><th>#</th>${cols.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>
+      <div class="signs"><div>Prepared by</div><div>Verified by<br><small>Field Director, Amrabad Tiger Reserve</small></div></div></div>`;
+  }
+  function pivotData() {
+    const R = $("#pRows").value, Cc = $("#pCols").value, V = $("#pVal").value, f = state.filtered;
+    const val = (l) => (V === "tigers" ? ids(l).length : l.length);
+    const rk = uniq(f.map((r) => r.raw[R] ?? "")).sort(R === state.col.month ? (a, b) => MONTHS.indexOf(a) - MONTHS.indexOf(b) : natural);
+    const ck = Cc ? uniq(f.map((r) => r.raw[Cc] ?? "")).sort(Cc === state.col.month ? (a, b) => MONTHS.indexOf(a) - MONTHS.indexOf(b) : natural) : [];
+    const headers = [R, ...ck, "Total"];
+    const rows = rk.map((k) => { const l = f.filter((r) => (r.raw[R] ?? "") === k); return [k || "(blank)", ...ck.map((c) => val(l.filter((r) => (r.raw[Cc] ?? "") === c)) || ""), val(l)]; });
+    rows.push(["Total", ...ck.map((c) => val(f.filter((r) => (r.raw[Cc] ?? "") === c)) || ""), val(f)]);
+    const title = `${V === "tigers" ? "Individual tigers" : "Records"} by ${R}${Cc ? " × " + Cc : ""}`;
+    return { title, headers, rows };
+  }
+  function renderPivot() {
+    if (!pivotOn) return;
+    const t = pivotData();
+    $("#pivotOut").innerHTML = `<div class="paper">${letterhead("Abstract – " + t.title)}<div class="table-wrap"><table class="data pivot"><thead><tr>${t.headers.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead>
+      <tbody>${t.rows.map((r, i) => `<tr class="${i === t.rows.length - 1 ? "tot" : ""}">${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+      <div class="signs"><div>Prepared by</div><div>Verified by<br><small>Field Director, Amrabad Tiger Reserve</small></div></div></div>`;
+  }
+  function saveFile(aoa, name, csv) {
+    if (csv) {
+      const blob = new Blob(["\ufeff" + Papa.unparse(aoa)], { type: "text/csv;charset=utf-8" });
+      const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: name + ".csv" }); document.body.appendChild(a); a.click(); a.remove();
+    } else {
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([[CFG.branding.titleSmall + " – " + CFG.branding.titleMain], ["Selection", filterSummary()], [], ...aoa]), "Report");
+      XLSX.writeFile(wb, name + ".xlsx");
+    }
+  }
+  function printPane(pane) {
+    document.body.dataset.print = pane;
+    setTimeout(() => { window.print(); }, 200);
+  }
+  window.addEventListener("afterprint", () => { document.body.dataset.print = ""; });
+  function wireBuilders() {
+    document.querySelectorAll(".rtab").forEach((b) => b.addEventListener("click", () => {
+      document.querySelectorAll(".rtab").forEach((x) => x.classList.toggle("on", x === b));
+      document.querySelectorAll(".rpane").forEach((p) => (p.hidden = p.dataset.r !== b.dataset.r));
+      $("#view-report .page-head .toolbar").hidden = b.dataset.r !== "abstract";
+    }));
+    $("#colAll").onclick = () => document.querySelectorAll("#colPick input").forEach((i) => (i.checked = true));
+    $("#colNone").onclick = () => document.querySelectorAll("#colPick input").forEach((i) => (i.checked = false));
+    $("#colDef").onclick = () => { const d = new Set((CFG.customDefaultColumns || []).map(norm)); document.querySelectorAll("#colPick input").forEach((i) => (i.checked = d.has(norm(i.value)))); };
+    $("#cGen").onclick = () => { customOn = true; renderCustom(); };
+    const customAoA = () => { const { cols, list } = customData(); return [["#", ...cols], ...list.map((r, n) => [n + 1, ...cols.map((h) => r.raw[h] ?? "")])]; };
+    $("#cXlsx").onclick = () => saveFile(customAoA(), `ATR_custom_report_${stamp()}`);
+    $("#cCsv").onclick = () => saveFile(customAoA(), `ATR_custom_report_${stamp()}`, true);
+    $("#cPrint").onclick = () => { customOn = true; renderCustom(); printPane("custom"); };
+    $("#pGen").onclick = () => { pivotOn = true; renderPivot(); };
+    $("#pXlsx").onclick = () => { const t = pivotData(); saveFile([[t.title], t.headers, ...t.rows], `ATR_abstract_${stamp()}`); };
+    $("#pPrint").onclick = () => { pivotOn = true; renderPivot(); printPane("pivot"); };
   }
 
   // ---------- report ----------
@@ -510,7 +672,7 @@
     const now = new Date().toLocaleString("en-IN", { dateStyle: "long", timeStyle: "short" });
     const B = CFG.branding;
     const detail = f.map((r, n) => {
-      const pics = r.photos.slice(0, 3).map((p) => `<img class="rthumb pthumb" loading="lazy" src="${esc(p.thumb)}" data-big="${esc(p.big)}" data-url="${esc(p.url)}" alt="">`).join("");
+      const pics = r.photos.slice(0, 3).map((p) => imgTag(p, "rthumb")).join("");
       return `<tr><td>${n + 1}</td><td><b>${esc(r.tigerId)}</b></td><td>${esc(r.dateText || period(r))}</td><td>${esc(r.division)}</td><td>${esc(r.range)}</td><td>${esc(r.section)}</td><td>${esc(r.beat)}</td><td>${esc(r.block)}</td><td>${esc(r.compt)}</td>
         <td>${r.hasCoord ? r.lat.toFixed(5) + ", " + r.lon.toFixed(5) : "–"}</td><td>${pics || (r.hasPhoto ? "Yes" : "No")}</td></tr>`;
     }).join("");
@@ -537,7 +699,7 @@
     const photoCol = state.col.photo;
     $("#recordsTable").innerHTML = `<table class="data"><thead><tr>${heads.map((h) => `<th data-h="${esc(h)}" class="sortable">${esc(h)}${state.sortKey === h ? (state.sortDir > 0 ? " ▲" : " ▼") : ""}</th>`).join("")}</tr></thead><tbody>
       ${list.map((r) => `<tr data-i="${r.i}" class="go">${heads.map((h) => {
-        if (h === photoCol && r.photos.length) return `<td>${r.photos.slice(0, 3).map((p) => `<img class="rthumb pthumb" loading="lazy" src="${esc(p.thumb)}" data-big="${esc(p.big)}" data-url="${esc(p.url)}" alt="">`).join("")}</td>`;
+        if (h === photoCol && r.photos.length) return `<td>${r.photos.slice(0, 3).map((p) => imgTag(p, "rthumb")).join("")}</td>`;
         return `<td>${esc(r.raw[h])}</td>`;
       }).join("")}</tr>`).join("")}</tbody></table>`;
   }
@@ -572,7 +734,10 @@
   }
   function openLightbox(img) {
     const lb = $("#lightbox");
-    lb.querySelector("img").src = img.dataset.big || img.src;
+    const li = lb.querySelector("img");
+    li.dataset.alt = img.dataset.alt ? img.dataset.alt.replace(/=w\d+$/, "=w1600") : "";
+    li.onerror = () => { if (li.dataset.alt) { li.src = li.dataset.alt; li.dataset.alt = ""; } };
+    li.src = img.dataset.tried ? img.src : (img.dataset.big || img.src);
     lb.querySelector(".lb-open").href = img.dataset.url || img.src;
     lb.hidden = false;
   }
@@ -589,6 +754,8 @@
 
   document.addEventListener("DOMContentLoaded", () => {
     applyBranding();
+    state.profileInfo = {};
+    wirePhotoModal(); wireBuilders(); loadProfiles();
     initMaps();
     document.querySelectorAll(".menu[data-view]").forEach((t) => t.addEventListener("click", () => switchView(t.dataset.view)));
     document.querySelectorAll("[data-goto]").forEach((a) => a.addEventListener("click", (e) => { e.preventDefault(); switchView(a.dataset.goto); }));
@@ -608,7 +775,7 @@
     if (0) $("#fpCollapse").addEventListener("click", () => { $("#filterPanel").hidden = true; $("#fpOpen").hidden = false; switchView(document.querySelector(".menu.active").dataset.view); });
     if (0) $("#fpOpen").addEventListener("click", () => { $("#filterPanel").hidden = false; $("#fpOpen").hidden = true; switchView(document.querySelector(".menu.active").dataset.view); });
     $("#refreshBtn").addEventListener("click", load);
-    $("#printBtn").addEventListener("click", () => { switchView("report"); setTimeout(() => window.print(), 300); });
+    $("#printBtn").addEventListener("click", () => { switchView("report"); printPane("abstract"); });
     $("#csvBtn").addEventListener("click", downloadCsv);
     $("#csvBtn2").addEventListener("click", downloadCsv);
     $("#xlsxBtn").addEventListener("click", downloadXlsx);
@@ -621,6 +788,8 @@
       if (e.target.matches(".lightbox, .lb-close")) { $("#lightbox").hidden = true; return; }
       const tr = e.target.closest("tr.go[data-i]");
       if (tr) { locate(state.records[+tr.dataset.i]); return; }
+      const sp = e.target.closest("[data-setphoto]");
+      if (sp) { openPhotoModal(sp.dataset.setphoto); return; }
       const tb = e.target.closest("[data-tiger]");
       if (tb) {
         state.pending = { ...state.filters, tigerId: tb.dataset.tiger }; commitFilters(); switchView("map");
@@ -631,6 +800,7 @@
     document.addEventListener("error", (e) => {
       const img = e.target;
       if (!(img instanceof HTMLImageElement) || !img.classList.contains("pthumb")) return;
+      if (img.dataset.alt && !img.dataset.tried) { img.dataset.tried = "1"; img.src = img.dataset.alt; return; }
       const holder = img.closest(".ph");
       if (holder) { holder.innerHTML = "<span>🐅</span>"; return; }
       const a = Object.assign(document.createElement("a"), { href: img.dataset.url, target: "_blank", rel: "noopener", textContent: "📷 Open photo", className: "photo-link" });

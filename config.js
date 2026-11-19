@@ -18,6 +18,17 @@ window.ATR_CONFIG = {
   csvUrl:
     "https://docs.google.com/spreadsheets/d/e/2PACX-1vT4Y2iDgvgsrobVrerQauLCtB8dnXQpp4UYIU9d1dVEQhlxblrsDlzfnvCDbCis93Q_4szeDFPZY3B1/pub?gid=650403308&single=true&output=csv",
 
+  // Tiger profile photos (optional). Easiest: add a tab named "Tiger_Profiles" to the
+  // sheet with columns  Tiger_ID | Profile_Photo_URL | Name | Remarks , publish that tab
+  // to the web as CSV, and paste its link here. Leave "" if not used.
+  profileCsvUrl: "",
+  // Or list them here directly:  "ATR M 19": "https://drive.google.com/file/d/…/view",
+  profilePhotos: {
+  },
+
+  // Columns ticked by default in the custom report builder.
+  customDefaultColumns: ["Sl_No", "Date", "Tiger_ID", "Tiger_evid", "Division", "Range", "Section", "Beat", "Compt_No", "Latitude", "Longitude", "photo_URL"],
+
   // Map starts here before the records are plotted (Amrabad TR, Telangana).
   mapCenter: [16.35, 78.85],
   mapZoom: 10,

@@ -52,3 +52,26 @@ To try it on your own computer, open a terminal in this folder and run
 Note: Google's satellite tiles are used directly, which is fine for internal use; for a
 high-traffic public site, Google's terms expect the official Maps JavaScript API with a key.
 The Esri World Imagery layer is a ready alternative in the layer switcher.
+
+## Photos on the map
+Records with a link in `photo_URL` show as a 📷 pin. Click the pin to see the photo
+(click the photo to enlarge). Google Drive photos must be shared as
+"Anyone with the link – Viewer", otherwise they cannot be displayed.
+
+## Tiger profile photos
+Each tiger card shows, in this order of priority:
+1. A photo set with the **📷 Set photo** button on the card (saved only in that browser).
+2. A photo from a **Tiger_Profiles** tab in the Google Sheet (shown to everyone):
+   - Add a new tab named `Tiger_Profiles` with columns `Tiger_ID | Profile_Photo_URL | Name | Remarks`.
+   - Put one row per tiger, e.g. `ATR M 19 | https://drive.google.com/file/d/…/view | | Resident male`.
+   - File → Share → Publish to web → choose the `Tiger_Profiles` tab → CSV → Publish, copy the link.
+   - Paste the link in `config.js` → `profileCsvUrl`.
+3. A photo listed in `config.js` → `profilePhotos`.
+4. Otherwise the latest record photo of that tiger.
+
+## Reports
+The Abstract Reports page has three tabs, all following the current filters:
+- **Abstract report** – fixed summary tables (tiger-, range-, beat-, month-wise, year × month, etc.).
+- **Custom report** – tick the columns you want, choose sort order, then Excel / CSV / Print-PDF.
+  Default ticked columns are set in `config.js` → `customDefaultColumns`.
+- **Pivot abstract** – count records or individual tigers by any two columns (e.g. Range × Year).
