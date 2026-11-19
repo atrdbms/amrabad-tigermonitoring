@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Amrabad Tiger Reserve – Tiger Monitoring Management System</title>
+<link rel="icon" href="assets/atr-logo.png">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Government strip -->
+<div class="gov-strip">
+  <span id="govLine">Government of Telangana · Telangana Forest Department</span>
+  <span class="gov-right"><span id="clock"></span></span>
+</div>
+
+<!-- Branded header -->
+<header class="masthead">
+  <img class="logo" id="logoLeft" src="assets/atr-logo.png" alt="Amrabad Tiger Reserve logo">
+  <div class="title-block">
+    <div class="t-small" id="titleSmall">Amrabad Tiger Reserve</div>
+    <h1 id="titleMain">Tiger Monitoring Management System</h1>
+    <div class="t-sub" id="titleSub">Camera Trap &amp; Field Monitoring · Nagarkurnool &amp; Nalgonda Districts</div>
+  </div>
+  <img class="logo" id="logoRight" src="assets/telangana-emblem.png" alt="Government of Telangana emblem">
+</header>
+
+<!-- Menu bar -->
+<nav class="menubar" role="tablist">
+  <button class="menu active" data-view="dashboard"><i>▦</i>Dashboard</button>
+  <button class="menu" data-view="map"><i>🛰</i>GIS Map</button>
+  <button class="menu" data-view="profiles"><i>🐅</i>Tiger Profiles</button>
+  <button class="menu" data-view="report"><i>📋</i>Abstract Reports</button>
+  <button class="menu" data-view="records"><i>☰</i>Records</button>
+  <div class="menu-right">
+    <span class="sync" id="status">Connecting to database…</span>
+    <button class="menu sync-btn" id="refreshBtn" title="Reload data from Google Sheet">↻ Sync</button>
+  </div>
+</nav>
+
+<!-- M-STrIPES style filter bar -->
+<section class="filterbar" id="filterBar">
+  <div class="fb-title">⚲ FILTER</div>
+  <div class="fb-fields" id="filterFields"></div>
+  <div class="fb-extra">
+    <div class="field">
+      <label>Photo</label>
+      <div class="seg" id="f_photo">
+        <button data-v="" class="on">All</button>
+        <button data-v="with">With</button>
+        <button data-v="without">Without</button>
+      </div>
+    </div>
+    <div class="fb-actions">
+      <button class="btn primary" id="applyBtn">✔ Apply</button>
+      <button class="btn" id="resetBtn">✖ Reset</button>
+    </div>
+  </div>
+  <div class="fb-applied" id="applied"></div>
+  <input id="f_search" type="hidden">
+</section>
+
+<div class="layout">
+  <main class="content">
+    <!-- Dashboard -->
+    <section class="view active" id="view-dashboard">
+      <div class="page-head"><h2>Dashboard</h2><div class="crumb" id="crumb1"></div></div>
+      <div class="kpis" id="kpis"></div>
+      <div class="card"><div class="card-h">Month-wise tiger records</div><div class="chart-box"><canvas id="chMonth"></canvas></div></div>
+      <div class="grid3">
+        <div class="card"><div class="card-h">Year-wise records &amp; individuals</div><div class="chart-box"><canvas id="chYear"></canvas></div></div>
+        <div class="card"><div class="card-h">Evidence type</div><div class="chart-box"><canvas id="chEvid"></canvas></div></div>
+        <div class="card"><div class="card-h">Individuals by sex</div><div class="chart-box"><canvas id="chSex"></canvas></div></div>
+      </div>
+      <div class="grid2">
+        <div class="card"><div class="card-h">Range-wise records &amp; individuals</div><div class="chart-box"><canvas id="chRange"></canvas></div></div>
+        <div class="card"><div class="card-h">Top 25 tigers by records</div><div class="chart-box tall"><canvas id="chTiger"></canvas></div></div>
+      </div>
+      <div class="card"><div class="card-h">Location overview (Google satellite) <a href="#" class="card-link" data-goto="map">Open GIS map →</a></div><div id="miniMap"></div></div>
+      <div class="card"><div class="card-h">Latest records <a href="#" class="card-link" data-goto="records">View all →</a></div><div class="table-wrap" id="latest"></div></div>
+    </section>
+
+    <!-- Map -->
+    <section class="view" id="view-map">
+      <div id="map"></div>
+      <div class="map-legend" id="mapNote"></div>
+    </section>
+
+    <!-- Profiles -->
+    <section class="view" id="view-profiles">
+      <div class="page-head"><h2>Tiger Profiles</h2><div class="crumb" id="crumb2"></div></div>
+      <div class="profiles" id="profiles"></div>
+    </section>
+
+    <!-- Report -->
+    <section class="view" id="view-report">
+      <div class="page-head no-print"><h2>Abstract Reports</h2>
+        <div class="toolbar">
+          <button class="btn primary" id="printBtn">🖨 Print / PDF</button>
+          <button class="btn" id="xlsxBtn">⬇ Excel</button>
+          <button class="btn" id="csvBtn">⬇ CSV</button>
+        </div>
+      </div>
+      <div id="report"></div>
+    </section>
+
+    <!-- Records -->
+    <section class="view" id="view-records">
+      <div class="page-head"><h2>Records</h2>
+        <div class="toolbar"><span id="recCount" class="muted"></span><button class="btn" id="csvBtn2">⬇ CSV</button></div>
+      </div>
+      <div class="card flush"><div class="table-wrap" id="recordsTable"></div></div>
+    </section>
+
+    <footer class="foot no-print">
+      © <span id="yr"></span> Amrabad Tiger Reserve, Telangana Forest Department · Data source: ATR Tiger Monitoring sheet (live)
+    </footer>
+  </main>
+</div>
+
+<div id="lightbox" class="lightbox" hidden>
+  <button class="lb-close" aria-label="Close">×</button>
+  <img alt="Tiger photo">
+  <a class="lb-open" target="_blank" rel="noopener">Open original ↗</a>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
