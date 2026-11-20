@@ -83,3 +83,26 @@ The Abstract Reports page has three tabs, all following the current filters:
   Click a boundary to see its name and attributes. Uploaded layers are remembered in that browser.
 - To show boundaries to **everyone**, upload the .kml files to the GitHub repository (e.g. a `kml`
   folder) and list them in `config.js` → `kmlLayers`, e.g. `{ name: "Beats", url: "kml/ATR_beats.kml" }`.
+
+## Editing records & adding photos
+Staff can edit any record, add a new record, or upload a photo straight from the website
+(✏ button in the Records table, **✏ Edit details / 📷 Add photo** in a map popup, **➕ Add new record**
+on the Records page). Changes are written into the Google Sheet and photos are saved in the Drive
+folder *Tiger monitoring database_Images*, with the link written into `photo_URL`.
+
+**One-time setup (about 5 minutes, done by the sheet owner):**
+1. Open the Google Sheet → **Extensions → Apps Script**.
+2. Delete the code shown there and paste the whole of `apps-script/Code.gs` from this repository.
+3. On the line `const EDIT_PASSWORD = 'change-this-password';` put your own password. Share it only with staff who may edit.
+4. Click **Save** (💾), then **Deploy → New deployment** → gear icon → **Web app**:
+   - *Execute as*: **Me**  · *Who has access*: **Anyone** → **Deploy**.
+   - Click **Authorize access**, choose your Google account, *Advanced → Go to … (unsafe)* → **Allow**
+     (this is your own script asking to edit your sheet and save photos to your Drive).
+5. Copy the **Web app URL** (ends with `/exec`) and paste it into `config.js` → `editApiUrl: "…"`.
+   Commit `config.js` to GitHub.
+
+Notes
+- The website shows a saved change immediately. The public CSV link that the site reads is refreshed
+  by Google every few minutes, so other users see the change after a short delay (press ↻ Sync).
+- Every edit needs the edit password; without it nothing is saved.
+- If you change `Code.gs` later: **Deploy → Manage deployments → ✏ → Version: New version → Deploy** (the URL stays the same).

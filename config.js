@@ -38,6 +38,10 @@ window.ATR_CONFIG = {
   kmlLayers: [
   ],
 
+  // Editing from the website (optional). Paste the Apps Script web-app URL here after the
+  // one-time setup in README → "Editing records & adding photos". Leave "" to switch editing off.
+  editApiUrl: "",
+
   // Map starts here before the records are plotted (Amrabad TR, Telangana).
   mapCenter: [16.35, 78.85],
   mapZoom: 10,

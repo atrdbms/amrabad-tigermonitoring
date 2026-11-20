@@ -165,7 +165,7 @@
     <!-- Records -->
     <section class="view" id="view-records">
       <div class="page-head"><h2>Records</h2>
-        <div class="toolbar"><span id="recCount" class="muted"></span><button class="btn" id="csvBtn2">⬇ CSV</button></div>
+        <div class="toolbar"><span id="recCount" class="muted"></span><button class="btn primary" id="addRecBtn">➕ Add new record</button><button class="btn" id="csvBtn2">⬇ CSV</button></div>
       </div>
       <div class="card flush"><div class="table-wrap" id="recordsTable"></div></div>
     </section>
@@ -192,6 +192,32 @@
     </div>
   </div>
 </div>
+
+<div id="editModal" class="modal" hidden>
+  <div class="modal-box wide">
+    <div class="modal-h"><span id="emTitle">Edit record</span><button class="lb-close dark" id="emClose">×</button></div>
+    <div id="emSetup" class="banner" hidden></div>
+    <form id="emForm" autocomplete="off">
+      <div class="em-grid" id="emFields"></div>
+      <div class="em-photo">
+        <div class="em-ph-prev" id="emPhPrev"></div>
+        <div>
+          <b>Photo</b>
+          <label class="btn file-btn">📷 Choose / take photo<input type="file" id="emFile" accept="image/*" hidden></label>
+          <label class="chk"><input type="checkbox" id="emKeep" checked> Keep existing photo link(s) and add this one</label>
+          <div class="muted small" id="emFileInfo">The photo is saved to Google Drive and linked in the photo_URL column.</div>
+        </div>
+      </div>
+      <div class="em-foot">
+        <label>Edit password <input type="password" id="emPass" required></label>
+        <span id="emMsg" class="small"></span>
+        <button type="submit" class="btn primary" id="emSave">💾 Save to sheet</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
 
 <div id="lightbox" class="lightbox" hidden>
   <button class="lb-close" aria-label="Close">×</button>

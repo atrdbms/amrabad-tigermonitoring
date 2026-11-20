@@ -116,6 +116,7 @@
 
   function ingest(headers, rows) {
     state.headers = headers;
+    state.rawRows = rows;
     const col = {};
     for (const [k, aliases] of Object.entries(CFG.columns)) col[k] = findColumn(headers, aliases);
     // Combined "lat, long" column fallback
@@ -412,7 +413,9 @@
     return `<div class="popup">
       <div class="pop-h" style="--c:${colorFor(r.tigerId)}">${esc(r.tigerId || "Unknown tiger")}<small>${esc(r.dateText || period(r))}</small></div>
       <div class="coords">${r.lat.toFixed(5)}° N, ${r.lon.toFixed(5)}° E · <a target="_blank" rel="noopener" href="https://www.google.com/maps?q=${r.lat},${r.lon}&t=k">Google Maps ↗</a></div>
-      ${photoBlock}<table>${rows}</table></div>`;
+      ${photoBlock}
+      <div class="pop-act"><button class="btn sm" data-edit="${r.i}">✏ Edit details</button><button class="btn sm" data-edit="${r.i}" data-photo="1">📷 Add photo</button></div>
+      <table>${rows}</table></div>`;
   }
 
   function renderMaps(fit) {
@@ -432,7 +435,9 @@
     }
     if (fit && pts.length) {
       const b = L.latLngBounds(pts.map((r) => [r.lat, r.lon])).pad(0.15);
-      map.fitBounds(b, { maxZoom: 15 }); mini.fitBounds(b, { maxZoom: 14 });
+      state.lastBounds = b;
+      if (map.getSize().x > 0) map.fitBounds(b, { maxZoom: 15 }); else state.fitMain = true;
+      if (mini.getSize().x > 0) mini.fitBounds(b, { maxZoom: 14 }); else state.fitMini = true;
     }
     const noCoord = state.filtered.length - allPts.length;
     const byT = group(allPts, (r) => r.tigerId);
@@ -559,6 +564,92 @@
     (CFG.kmlLayers || []).forEach((k) => fetch(k.url).then((r) => (r.ok ? r.text() : Promise.reject(r.status)))
       .then((t) => addKml(k.name, t, { fixed: true, noZoom: true })).catch(() => { $("#kmlMsg").textContent = `Could not load ${k.url}`; }));
     try { JSON.parse(localStorage.getItem("atr_kml") || "[]").forEach((k) => addKml(k.name, k.text, { restored: true, noZoom: true })); } catch (e) { /* ignore */ }
+  }
+
+  // ---------- edit records & add photos (via Google Apps Script) ----------
+  const EDIT_LIST_FIELDS = ["tigerId", "evidence", "division", "range", "section", "beat", "block"];
+  let emRec = null, emPhoto = null;
+  function openEditor(r, focusPhoto) {
+    emRec = r; emPhoto = null;
+    const H = state.headers, col = state.col;
+    const keyCol = H.find((h) => /^(sl_?no|s\.?\s?no|serial)/i.test(h)) || H[0];
+    state.keyCol = keyCol;
+    const skip = new Set([col.photo, col.photoName].filter(Boolean));
+    $("#emTitle").textContent = r ? `Edit record ${r.raw[keyCol] ? "#" + r.raw[keyCol] : ""} – ${r.tigerId || ""}` : "Add new record";
+    const listOf = {}; EDIT_LIST_FIELDS.forEach((k) => { if (col[k]) listOf[col[k]] = uniq(state.records.map((x) => x[k])).sort(natural); });
+    $("#emFields").innerHTML = H.filter((h) => !skip.has(h)).map((h) => {
+      const v = r ? r.raw[h] ?? "" : "";
+      const ro = h === keyCol;
+      const dl = listOf[h] ? `<datalist id="dl_${esc(norm(h))}">${listOf[h].map((x) => `<option value="${esc(x)}">`).join("")}</datalist>` : "";
+      const ph = h === col.date ? "dd/mm/yyyy" : h === col.lat ? "e.g. 16.26149" : h === col.lon ? "e.g. 78.62613" : "";
+      const wide = /remark|location/i.test(h) ? " wide" : "";
+      return `<label class="em-f${wide}">${esc(h)}<input data-h="${esc(h)}" value="${esc(ro && !r ? "(auto)" : v)}" ${ro ? "readonly" : ""} placeholder="${ph}" ${dl ? `list="dl_${esc(norm(h))}"` : ""}>${dl}</label>`;
+    }).join("");
+    const cur = r ? r.photos : [];
+    $("#emPhPrev").innerHTML = cur.length ? cur.map((p) => imgTag(p, "")).join("") : `<span>No photo yet</span>`;
+    $("#emFile").value = ""; $("#emFileInfo").textContent = "The photo is saved to Google Drive and linked in the photo_URL column.";
+    $("#emKeep").closest("label").hidden = !cur.length;
+    $("#emPass").value = sessionStorage.getItem("atr_edit_pw") || "";
+    $("#emMsg").textContent = ""; $("#emMsg").className = "small";
+    const setup = !CFG.editApiUrl;
+    $("#emSetup").hidden = !setup;
+    $("#emSetup").innerHTML = setup ? "Saving is not switched on yet. Follow the one-time setup in README → <b>Editing records &amp; adding photos</b>, then put the web-app link in <code>config.js → editApiUrl</code>." : "";
+    $("#emSave").disabled = setup;
+    $("#editModal").hidden = false;
+    if (focusPhoto) $("#emFile").closest(".em-photo").scrollIntoView({ block: "center" });
+  }
+  function autoDateParts(e) {
+    const c = state.col; if (e.target.dataset.h !== c.date) return;
+    const d = parseDate(e.target.value); if (!d) return;
+    const set = (h, v) => { const i = h && $(`#emFields input[data-h="${CSS.escape(h)}"]`); if (i && !i.readOnly) i.value = v; };
+    set(c.year, d.y); set(c.month, MONTHS[d.m - 1]);
+    const mc = state.headers.find((h) => /^month_?code$/i.test(h)); set(mc, d.m);
+  }
+  async function saveEditor(ev) {
+    ev.preventDefault();
+    const msg = $("#emMsg");
+    const values = {};
+    document.querySelectorAll("#emFields input[data-h]").forEach((i) => {
+      if (i.readOnly) return;
+      const h = i.dataset.h, v = i.value.trim();
+      if (!emRec || String(emRec.raw[h] ?? "").trim() !== v) values[h] = v;
+    });
+    const lat = parseFloat(values[state.col.lat] ?? (emRec ? emRec.raw[state.col.lat] : ""));
+    const lon = parseFloat(values[state.col.lon] ?? (emRec ? emRec.raw[state.col.lon] : ""));
+    if ((values[state.col.lat] || values[state.col.lon]) && !(lat > 8 && lat < 38 && lon > 68 && lon < 98)) { msg.textContent = "Latitude/Longitude look wrong (expect about 16.x and 78.x)."; msg.className = "small err"; return; }
+    if (!Object.keys(values).length && !emPhoto) { msg.textContent = "Nothing changed."; return; }
+    const pw = $("#emPass").value;
+    const body = { action: emRec ? "update" : "add", key: emRec ? emRec.raw[state.keyCol] : "", values, password: pw, keepOldPhotos: $("#emKeep").checked };
+    if (emPhoto) body.photo = { data: emPhoto.split(",")[1], mime: "image/jpeg" };
+    $("#emSave").disabled = true; msg.className = "small"; msg.textContent = emPhoto ? "Uploading photo and saving…" : "Saving…";
+    try {
+      const res = await fetch(CFG.editApiUrl, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(body) });
+      const out = await res.json();
+      if (!out.ok) throw new Error(out.error || "Save failed");
+      sessionStorage.setItem("atr_edit_pw", pw);
+      // apply locally so the change shows at once (the published sheet link refreshes within a few minutes)
+      const saved = Object.assign({}, out.values || values);
+      if (emRec) Object.assign(state.rawRows[emRec.i], saved);
+      else state.rawRows.push(Object.assign(Object.fromEntries(state.headers.map((h) => [h, ""])), saved, { [state.keyCol]: out.key }));
+      ingest(state.headers, state.rawRows);
+      $("#editModal").hidden = true;
+      toast(emRec ? `Record #${out.key} saved to the sheet.` : `New record #${out.key} added to the sheet.`);
+    } catch (err) {
+      msg.textContent = "Not saved: " + err.message; msg.className = "small err";
+    } finally { $("#emSave").disabled = false; }
+  }
+  function toast(t) { const el = $("#toast"); el.textContent = "✔ " + t; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => (el.hidden = true), 5000); }
+  function wireEditor() {
+    $("#emClose").onclick = () => ($("#editModal").hidden = true);
+    $("#emForm").addEventListener("submit", saveEditor);
+    $("#emFields").addEventListener("change", autoDateParts);
+    $("#addRecBtn").onclick = () => openEditor(null);
+    $("#emFile").onchange = async (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      emPhoto = await resizeToDataUrl(f, 1600);
+      $("#emPhPrev").innerHTML = `<img src="${emPhoto}" alt="New photo">`;
+      $("#emFileInfo").textContent = `${f.name} – ready to upload (${Math.round((emPhoto.length * 0.75) / 1024)} KB).`;
+    };
   }
 
   // ---------- profiles ----------
@@ -857,8 +948,8 @@
     if (state.sortKey) list.sort((a, b) => state.sortDir * natural(a.raw[state.sortKey] ?? "", b.raw[state.sortKey] ?? ""));
     $("#recCount").textContent = `${list.length} of ${state.records.length} records · click a row to locate on map`;
     const photoCol = state.col.photo;
-    $("#recordsTable").innerHTML = `<table class="data"><thead><tr>${heads.map((h) => `<th data-h="${esc(h)}" class="sortable">${esc(h)}${state.sortKey === h ? (state.sortDir > 0 ? " ▲" : " ▼") : ""}</th>`).join("")}</tr></thead><tbody>
-      ${list.map((r) => `<tr data-i="${r.i}" class="go">${heads.map((h) => {
+    $("#recordsTable").innerHTML = `<table class="data"><thead><tr><th>Edit</th>${heads.map((h) => `<th data-h="${esc(h)}" class="sortable">${esc(h)}${state.sortKey === h ? (state.sortDir > 0 ? " ▲" : " ▼") : ""}</th>`).join("")}</tr></thead><tbody>
+      ${list.map((r) => `<tr data-i="${r.i}" class="go"><td><button class="ed-btn" data-edit="${r.i}" title="Edit / add photo">✏</button></td>${heads.map((h) => {
         if (h === photoCol && r.photos.length) return `<td>${r.photos.slice(0, 3).map((p) => imgTag(p, "rthumb")).join("")}</td>`;
         return `<td>${esc(r.raw[h])}</td>`;
       }).join("")}</tr>`).join("")}</tbody></table>`;
@@ -885,7 +976,9 @@
   function switchView(v) {
     document.querySelectorAll(".menu[data-view]").forEach((t) => t.classList.toggle("active", t.dataset.view === v));
     document.querySelectorAll(".view").forEach((s) => s.classList.toggle("active", s.id === "view-" + v));
-    setTimeout(() => { map && map.invalidateSize(); mini && mini.invalidateSize(); Object.values(charts).forEach((c) => c.resize()); }, 60);
+    setTimeout(() => { map && map.invalidateSize(); mini && mini.invalidateSize();
+      if (v === "map" && state.fitMain && state.lastBounds) { state.fitMain = false; map.fitBounds(state.lastBounds, { maxZoom: 15 }); }
+      if (v === "dashboard" && state.fitMini && state.lastBounds) { state.fitMini = false; mini.fitBounds(state.lastBounds, { maxZoom: 14 }); } Object.values(charts).forEach((c) => c.resize()); }, 60);
   }
   function locate(r) {
     if (!r || !r.hasCoord) return;
@@ -916,7 +1009,7 @@
   document.addEventListener("DOMContentLoaded", () => {
     applyBranding();
     state.profileInfo = {};
-    wirePhotoModal(); wireBuilders(); loadProfiles();
+    wirePhotoModal(); wireBuilders(); wireEditor(); loadProfiles();
     initMaps();
     document.querySelectorAll(".menu[data-view]").forEach((t) => t.addEventListener("click", () => switchView(t.dataset.view)));
     document.querySelectorAll("[data-goto]").forEach((a) => a.addEventListener("click", (e) => { e.preventDefault(); switchView(a.dataset.goto); }));
@@ -947,6 +1040,8 @@
     document.addEventListener("click", (e) => {
       if (e.target.classList.contains("pthumb")) { e.preventDefault(); openLightbox(e.target); return; }
       if (e.target.matches(".lightbox, .lb-close")) { $("#lightbox").hidden = true; return; }
+      const ed = e.target.closest("[data-edit]");
+      if (ed) { e.stopPropagation(); openEditor(state.records[+ed.dataset.edit], !!ed.dataset.photo); return; }
       const tr = e.target.closest("tr.go[data-i]");
       if (tr) { locate(state.records[+tr.dataset.i]); return; }
       const sp = e.target.closest("[data-setphoto]");
