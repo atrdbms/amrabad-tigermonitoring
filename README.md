@@ -91,8 +91,9 @@ on the Records page). Changes are written into the Google Sheet and photos are s
 folder *Tiger monitoring database_Images*, with the link written into `photo_URL`.
 
 **One-time setup (about 5 minutes, done by the sheet owner):**
-1. Open the Google Sheet → **Extensions → Apps Script**.
-2. Delete the code shown there and paste the whole of `apps-script/Code.gs` from this repository.
+1. Go to **https://script.google.com → New project** (a separate project, so any script already
+   attached to the sheet is not touched). Name it *ATR Tiger Edit Service*.
+2. Delete the empty `myFunction` shown there and paste the whole of `apps-script/Code.gs` from this repository.
 3. On the line `const EDIT_PASSWORD = 'change-this-password';` put your own password. Share it only with staff who may edit.
 4. Click **Save** (💾), then **Deploy → New deployment** → gear icon → **Web app**:
    - *Execute as*: **Me**  · *Who has access*: **Anyone** → **Deploy**.

@@ -2,17 +2,19 @@
  * Amrabad Tiger Reserve – Tiger Monitoring Management System
  * Edit service: lets the website edit records, add new records and upload photos.
  *
- * ONE-TIME SETUP (see README "Editing records & adding photos"):
- *   1. Open the Google Sheet → Extensions → Apps Script. Delete any code there and paste this file.
- *   2. Change EDIT_PASSWORD below to your own password (share it only with staff who may edit).
- *   3. Deploy → New deployment → type "Web app"
+ * ONE-TIME SETUP – use a SEPARATE Apps Script project, so any script already in the sheet is untouched:
+ *   1. Go to https://script.google.com → New project. Name it "ATR Tiger Edit Service".
+ *   2. Delete the empty function shown there and paste this whole file.
+ *   3. Change EDIT_PASSWORD below to your own password (share it only with staff who may edit).
+ *   4. Deploy → New deployment → gear icon → "Web app"
  *        Execute as: Me      Who has access: Anyone
  *      → Deploy → Authorize access (allow Sheets + Drive) → copy the Web app URL (ends in /exec).
- *   4. Paste that URL into config.js → editApiUrl on the website, and upload config.js to GitHub.
+ *   5. Paste that URL into config.js → editApiUrl on the website, and upload config.js to GitHub.
  * After changing this code later: Deploy → Manage deployments → Edit (pencil) → Version: New version → Deploy.
  */
 
 const EDIT_PASSWORD = 'change-this-password';   // <-- CHANGE THIS
+const SPREADSHEET_ID = '1zp2XweoeTHOcu0cUMAeN7ATfSpjXEQizUDLulQOtdIA'; // Tiger monitoring database
 const SHEET_NAME = 'Sheet1';                     // tab that holds the records
 const KEY_COLUMN = 'Sl_No';                      // unique number of each record
 const PHOTO_URL_COLUMN = 'photo_URL';            // link written here after upload
@@ -31,7 +33,7 @@ function doPost(e) {
     if (String(req.password || '') !== EDIT_PASSWORD) return json_({ ok: false, error: 'Wrong edit password.' });
     if (req.action === 'ping') return json_({ ok: true });
 
-    const sh = SpreadsheetApp.getActive().getSheetByName(SHEET_NAME);
+    const sh = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET_NAME);
     if (!sh) return json_({ ok: false, error: 'Sheet "' + SHEET_NAME + '" not found.' });
     const lastCol = sh.getLastColumn();
     const headers = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
