@@ -40,7 +40,7 @@ window.ATR_CONFIG = {
 
   // Editing from the website (optional). Paste the Apps Script web-app URL here after the
   // one-time setup in README → "Editing records & adding photos". Leave "" to switch editing off.
-  editApiUrl: "",
+  editApiUrl: "https://script.google.com/macros/s/AKfycbzYqhLVslrvbQeZxoeexx6s4z5nlAl1-GRJBX4sNqF1_ui_bUp1lMW97CbsQCwTS-r1/exec",
 
   // Map starts here before the records are plotted (Amrabad TR, Telangana).
   mapCenter: [16.35, 78.85],
