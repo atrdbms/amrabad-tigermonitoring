@@ -76,6 +76,8 @@ The Abstract Reports page has three tabs, all following the current filters:
 - **Pivot abstract** – count records or individual tigers by any two columns (e.g. Range × Year).
 
 ## GIS Map tools
+- **⛶ Full screen** (top-right): fills the whole screen with the map. Press **Esc** or click
+  **✕ Exit full screen** to return.
 - **Legend · Tiger ID** (bottom-right): tick or untick tigers to show or hide them on the map;
   *Select all* / *Clear all* buttons; ▼ collapses the legend.
 - **Boundary layers (KML)** (top-left): *Upload KML / KMZ* adds reserve, range, beat or compartment

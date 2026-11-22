@@ -360,6 +360,13 @@
     const bl = baseLayers(); bl["Google Satellite (labels)"].addTo(map);
     L.control.layers(bl).addTo(map);
     L.control.scale({ imperial: false }).addTo(map);
+    const FS = L.Control.extend({ onAdd() {
+      const b = L.DomUtil.create("a", "leaflet-bar fs-btn");
+      b.href = "#"; b.id = "fsBtn"; b.title = "Full screen (Esc to exit)"; b.innerHTML = "⛶ <span>Full screen</span>";
+      L.DomEvent.on(b, "click", (e) => { L.DomEvent.preventDefault(e); L.DomEvent.stopPropagation(e); toggleMapFull(); });
+      return b;
+    } });
+    map.addControl(new FS({ position: "topright" }));
     cluster = L.markerClusterGroup({ maxClusterRadius: 35, disableClusteringAtZoom: 15 });
     map.addLayer(cluster);
     pathLayer = L.layerGroup().addTo(map);
@@ -392,6 +399,24 @@
     baseLayers()["Google Satellite (labels)"].addTo(mini);
     miniLayer = L.layerGroup().addTo(mini);
   }
+
+  // ---------- full-screen map ----------
+  function setMapFull(on) {
+    const v = $("#view-map");
+    v.classList.toggle("map-full", on);
+    document.body.classList.toggle("no-scroll", on);
+    $("#fsBtn").innerHTML = on ? "✕ <span>Exit full screen</span>" : "⛶ <span>Full screen</span>";
+    $("#fsBtn").title = on ? "Exit full screen (Esc)" : "Full screen (Esc to exit)";
+    setTimeout(() => map.invalidateSize(), 120);
+  }
+  function toggleMapFull() {
+    const v = $("#view-map"), on = !v.classList.contains("map-full");
+    setMapFull(on);
+    if (on && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+    if (!on && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  }
+  document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement && $("#view-map").classList.contains("map-full")) setMapFull(false); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && $("#view-map").classList.contains("map-full") && !document.fullscreenElement) setMapFull(false); });
 
   function marker(r) {
     const m = r.hasPhoto
@@ -974,6 +999,7 @@
 
   // ---------- UI wiring ----------
   function switchView(v) {
+    if (v !== "map" && $("#view-map").classList.contains("map-full")) { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); setMapFull(false); }
     document.querySelectorAll(".menu[data-view]").forEach((t) => t.classList.toggle("active", t.dataset.view === v));
     document.querySelectorAll(".view").forEach((s) => s.classList.toggle("active", s.id === "view-" + v));
     setTimeout(() => { map && map.invalidateSize(); mini && mini.invalidateSize();
